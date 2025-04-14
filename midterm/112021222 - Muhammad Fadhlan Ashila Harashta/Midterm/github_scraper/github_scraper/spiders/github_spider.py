@@ -53,10 +53,16 @@ class GithubSpider(CrawlSpider):
             languages = [lang.strip() for lang in languages if lang.strip()]
             languages_str = ", ".join(languages) if languages else None
             # Commit
-            commit_text = response.css('div[data-component="text"] span.fgcolor-default::text').re_first(r'(\d+)\s+commits?')
-            number_of_commits = int(commit_text) if commit_text else None
+            commit_text = response.css('a[href*="commits"] span::text').get() \
+                        or response.css('strong[data-test-id="commits"]::text').get()
 
-            
+            if commit_text:
+                commit_count = commit_text.strip().replace(",", "")
+                if "Commit" not in commit_count:
+                    commit_count += " Commits"
+                commits = commit_count
+            else:
+                commits = "None"     
                 
             yield {
                 "url": url,
