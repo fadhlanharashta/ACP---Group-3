@@ -32,28 +32,22 @@ class GithubSpider(scrapy.Spider):
         item['url'] = response.url
         
         # About - check description first, then repo name if empty
-        about = response.css('div.Layout-sidebar div.BorderGrid-cell p.f4.m-3::text').get().strip()
+        about = response.css('div.Layout-sidebar div.BorderGrid-cell p.f4.my-3::text').get()
         if not about:
             about = response.css('strong.mr-2.flex-self-stretch a::text').get()
         item['about'] = about.strip() if about else None
         
-        # Last Updated
-        last_updated = response.css('relative-time::attr(datetime)').get()
-        item['last_updated'] = last_updated
-        
         # Check if repository is empty
         is_empty = response.css('div.Blankslate').get() is not None
         
-        # Languages (only if not empty)
         if not is_empty:
-            languages = response.css('div.Layout-main ul.numbers-summary li a[href*="search"] span::text').getall()
+            languages = response.css('div.BorderGrid-cell ul.list-style-none li.d-inline a[href*="search"] span.text-bold::text').getall()
             item['languages'] = [lang.strip() for lang in languages] if languages else None
         else:
             item['languages'] = None
         
-        # Number of Commits (only if not empty)
         if not is_empty:
-            commits_link = response.css('div.Layout-main ul.numbers-summary li a[href*="commits"] span::text').get()
+            commits_link = response.css('a[href*="commits"] span[data-component="buttonContent"] span[data-component="text"] span.fgColor-default::text').get()
             item['commits'] = commits_link.strip() if commits_link else None
         else:
             item['commits'] = None
