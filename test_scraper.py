@@ -18,7 +18,7 @@ def test_scraper():
         
         # Test search functionality
         print("\nTesting country search...")
-        test_countries = ['United States', 'China', 'India']
+        test_countries = ['Indonesia', 'China', 'India']
         for country in test_countries:
             result = scraper.search_country(country)
             if result is not None:

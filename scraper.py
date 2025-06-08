@@ -1,96 +1,143 @@
-import requests
-from bs4 import BeautifulSoup
 import pandas as pd
 import re
 from typing import Dict, List, Optional
+import time
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.webdriver.chrome.options import Options
 
 class PopulationScraper:
-    def __init__(self):
+    def __init__(self, max_retries: int = 3, retry_delay: int = 5):
         self.url = "https://www.worldometers.info/world-population/population-by-country/"
         self.data = None
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
+        self.driver = None
+        
+    def _setup_driver(self):
+        """Set up and configure the Chrome WebDriver"""
+        chrome_options = Options()
+        chrome_options.add_argument('--headless')
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        chrome_options.add_argument('--disable-gpu')
+        chrome_options.add_argument('--window-size=1920,1080')
+        chrome_options.add_argument('--disable-software-rasterizer')  # Disable software rasterizer
+        chrome_options.add_argument('--disable-webgl')  # Disable WebGL
+        chrome_options.add_argument('--disable-webgl2')  # Disable WebGL 2.0
+        
+        self.driver = webdriver.Chrome(options=chrome_options)
+        
+    def _close_driver(self):
+        """Close the WebDriver"""
+        if self.driver:
+            self.driver.quit()
+            self.driver = None
         
     def scrape_data(self) -> pd.DataFrame:
-        try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
-            
-            print("Fetching data from Worldometers...")
-            response = requests.get(self.url, headers=headers)
-            response.raise_for_status()
-            
-            print("Parsing HTML content...")
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # Try multiple table selectors
-            table = None
-            table_selectors = [
-                {'id': 'example2'},  # Original selector
-                {'class': 'table'},  # Common table class
-                {'class': 'table-striped'},  # Bootstrap table class
-                {'class': 'table-bordered'}  # Another common table class
-            ]
-            
-            for selector in table_selectors:
-                table = soup.find('table', selector)
-                if table:
-                    print(f"Found table with selector: {selector}")
-                    break
-            
-            if not table:
-                # Fallback: look for any table with population data
-                print("Trying to find table by content...")
-                tables = soup.find_all('table')
-                for t in tables:
-                    if t.find('th', string=lambda text: text and ('Country' in text or 'Population' in text)):
-                        table = t
-                        print("Found table by content")
-                        break
-            
-            if not table:
-                raise ValueError("Could not find population table on the page")
-            
-            print("Extracting table data...")
-            # Extract headers
-            headers = []
-            header_row = table.find('tr')
-            for th in header_row.find_all(['th', 'td']):
-                headers.append(th.get_text(strip=True))
-            
-            # Extract data rows
-            rows = []
-            for row in table.find_all('tr')[1:]:  # Skip header row
-                cells = row.find_all(['td', 'th'])
-                if len(cells) >= 10:  # Ensure we have enough columns
-                    row_data = [cell.get_text(strip=True) for cell in cells]
-                    rows.append(row_data)
-            
-            if not rows:
-                raise ValueError("No data rows found in the table")
-            
-            print("Creating DataFrame...")
-            # Create DataFrame
-            df = pd.DataFrame(rows, columns=headers[:len(rows[0]) if rows else 0])
-            
-            # Clean and process the data
-            print("Cleaning and processing data...")
-            df = self._clean_data(df)
-            
-            self.data = df
-            print("Scraping completed successfully!")
-            return df
-            
-        except Exception as e:
-            print(f"Error scraping data: {e}")
-            print("Using fallback data...")
-            return self._get_fallback_data()
+        retry_count = 0
+        last_error = None
+        
+        while retry_count < self.max_retries:
+            try:
+                print(f"Fetching data from Worldometers... (Attempt {retry_count + 1}/{self.max_retries})")
+                
+                if not self.driver:
+                    self._setup_driver()
+                
+                self.driver.get(self.url)
+                
+                # Debug: Print page title
+                print("\nPage Title:", self.driver.title)
+                
+                # Debug: Print page source length
+                print("\nPage Source Length:", len(self.driver.page_source))
+                
+                # Debug: Print all table elements found
+                print("\nAll tables found on page:")
+                tables = self.driver.find_elements(By.TAG_NAME, "table")
+                print(f"Number of tables found: {len(tables)}")
+                for i, table in enumerate(tables):
+                    print(f"\nTable {i+1}:")
+                    print("Table ID:", table.get_attribute("id"))
+                    print("Table Class:", table.get_attribute("class"))
+                
+                print("\nWaiting for table to load...")
+                wait = WebDriverWait(self.driver, 10)
+                table = wait.until(
+                    EC.presence_of_element_located((By.CLASS_NAME, "datatable"))
+                )
+                
+                # Debug: Print table details
+                print("\nFound target table:")
+                print("Table Class:", table.get_attribute("class"))
+                
+                print("\nExtracting table data...")
+                # Get headers
+                headers = []
+                header_cells = table.find_elements(By.CSS_SELECTOR, "thead th")
+                print(f"\nNumber of header cells found: {len(header_cells)}")
+                for cell in header_cells:
+                    header_text = cell.text.strip()
+                    headers.append(header_text)
+                    print(f"Header: {header_text}")
+                
+                # Get data rows
+                rows = []
+                data_rows = table.find_elements(By.CSS_SELECTOR, "tbody tr")
+                print(f"\nNumber of data rows found: {len(data_rows)}")
+                
+                for i, row in enumerate(data_rows[:5]):  # Print first 5 rows for debugging
+                    cells = row.find_elements(By.TAG_NAME, "td")
+                    if len(cells) >= 10:
+                        row_data = [cell.text.strip() for cell in cells]
+                        rows.append(row_data)
+                        print(f"\nRow {i+1} data:")
+                        for j, cell_text in enumerate(row_data):
+                            print(f"Column {j+1}: {cell_text}")
+                
+                if not rows:
+                    raise ValueError("No data rows found in the table")
+                
+                print("\nCreating DataFrame...")
+                # Create DataFrame
+                df = pd.DataFrame(rows, columns=headers[:len(rows[0]) if rows else 0])
+                
+                print("\nCleaning and processing data...")
+                df = self._clean_data(df)
+                
+                self.data = df
+                print("\nScraping completed successfully!")
+                return df
+                
+            except Exception as e:
+                last_error = e
+                retry_count += 1
+                if retry_count < self.max_retries:
+                    print(f"\nError occurred: {str(e)}")
+                    print(f"Retrying in {self.retry_delay} seconds...")
+                    time.sleep(self.retry_delay)
+                else:
+                    print(f"\nFailed after {self.max_retries} attempts. Last error: {str(last_error)}")
+                    raise last_error
+            finally:
+                self._close_driver()
+    
+    def __del__(self):
+        """Cleanup when the object is destroyed"""
+        self._close_driver()
     
     def _clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """Clean and format the scraped data"""
         # Rename columns to standard names
         column_mapping = {
-            'Country (or dependency)': 'Country',
-            'Population (2025)': 'Population',
+            'Country (or\ndependency)': 'Country',
+            'Country (or dependency)': 'Country',  # Fallback for if the br tag is handled differently
+            'Population\n(2025)': 'Population',
+            'Population (2025)': 'Population',  # Fallback
             'Yearly Change': 'Yearly_Change',
             'Net Change': 'Net_Change',
             'Density (P/Km²)': 'Density',
@@ -102,10 +149,18 @@ class PopulationScraper:
             'World Share': 'World_Share'
         }
         
+        # Debug: Print original column names
+        print("\nOriginal column names:")
+        print(df.columns.tolist())
+        
         # Apply column mapping
         for old_name, new_name in column_mapping.items():
             if old_name in df.columns:
                 df = df.rename(columns={old_name: new_name})
+        
+        # Debug: Print column names after mapping
+        print("\nColumn names after mapping:")
+        print(df.columns.tolist())
         
         # Clean numeric columns
         numeric_columns = ['Population', 'Net_Change', 'Density', 'Land_Area', 
@@ -128,25 +183,6 @@ class PopulationScraper:
         
         return df
     
-    def _get_fallback_data(self) -> pd.DataFrame:
-        """Fallback data in case scraping fails"""
-        print("Using fallback data...")
-        fallback_data = [
-            ['India', 1463865525, 0.89, 12929734, 492, 2973190, -495753, 1.94, 28.8, 37.1, 17.78],
-            ['China', 1416096094, -0.23, -3225184, 151, 9388211, -268126, 1.02, 40.1, 67.5, 17.20],
-            ['United States', 347275807, 0.54, 1849236, 38, 9147420, 1230663, 1.62, 38.5, 82.8, 4.22],
-            ['Indonesia', 285721236, 0.79, 2233305, 158, 1811570, -39509, 2.1, 30.4, 59.6, 3.47],
-            ['Pakistan', 255219554, 1.57, 3950390, 331, 770880, -1235336, 3.5, 20.6, 34.4, 3.10]
-        ]
-        
-        columns = ['Country', 'Population', 'Yearly_Change', 'Net_Change', 'Density', 
-                  'Land_Area', 'Net_Migration', 'Fertility_Rate', 'Median_Age', 
-                  'Urban_Population_Percent', 'World_Share']
-        
-        df = pd.DataFrame(fallback_data, columns=columns)
-        df.insert(0, 'Rank', range(1, len(df) + 1))
-        return df
-    
     def get_data(self) -> pd.DataFrame:
         """Get the scraped data, scraping if necessary"""
         if self.data is None:
@@ -158,17 +194,29 @@ class PopulationScraper:
         if self.data is None:
             self.scrape_data()
         
-        if self.data is None:
-            print("No data available for search")
-            return None
+        # Debug: Print all column names
+        print("\nAvailable columns in DataFrame:")
+        print(self.data.columns.tolist())
+        
+        # Try both possible column names
+        possible_columns = ['Country (or\ndependency)', 'Country (or dependency)', 'Country']
+        country_column = None
+        
+        for col in possible_columns:
+            if col in self.data.columns:
+                country_column = col
+                break
+        
+        if country_column is None:
+            raise ValueError("Could not find country column in the data")
         
         # Try exact match first
-        exact_match = self.data[self.data['Country'].str.lower() == country_name.lower()]
+        exact_match = self.data[self.data[country_column].str.lower() == country_name.lower()]
         if not exact_match.empty:
             return exact_match.iloc[0]
         
         # Try partial match
-        partial_match = self.data[self.data['Country'].str.contains(country_name, case=False, na=False)]
+        partial_match = self.data[self.data[country_column].str.contains(country_name, case=False, na=False)]
         if not partial_match.empty:
             return partial_match.iloc[0]
         
@@ -179,17 +227,8 @@ class PopulationScraper:
         if self.data is None:
             self.scrape_data()
         
-        if self.data is None or self.data.empty:
-            print("No data available for getting top countries")
-            return pd.DataFrame(columns=['Rank', 'Country', 'Population', 'Yearly_Change', 'Net_Change', 
-                                       'Density', 'Land_Area', 'Net_Migration', 'Fertility_Rate', 
-                                       'Median_Age', 'Urban_Population_Percent', 'World_Share'])
-        
         if by not in self.data.columns:
-            print(f"Column '{by}' not found in data")
-            return pd.DataFrame(columns=['Rank', 'Country', 'Population', 'Yearly_Change', 'Net_Change', 
-                                       'Density', 'Land_Area', 'Net_Migration', 'Fertility_Rate', 
-                                       'Median_Age', 'Urban_Population_Percent', 'World_Share'])
+            raise ValueError(f"Column '{by}' not found in data")
         
         return self.data.nlargest(n, by)
     
@@ -198,12 +237,7 @@ class PopulationScraper:
         if self.data is None:
             self.scrape_data()
         
-        if self.data is None:
-            print("No data available for range search")
-            return pd.DataFrame()
-        
         if column not in self.data.columns:
-            print(f"Column '{column}' not found in data")
-            return pd.DataFrame()
+            raise ValueError(f"Column '{column}' not found in data")
         
         return self.data[(self.data[column] >= min_val) & (self.data[column] <= max_val)]
