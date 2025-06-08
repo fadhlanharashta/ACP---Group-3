@@ -10,7 +10,7 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from selenium.webdriver.chrome.options import Options
 
 class PopulationScraper:
-    def __init__(self, max_retries: int = 3, retry_delay: int = 5):
+    def __init__(self, max_retries: int = 1, retry_delay: int = 5):
         self.url = "https://www.worldometers.info/world-population/population-by-country/"
         self.data = None
         self.max_retries = max_retries
@@ -50,20 +50,13 @@ class PopulationScraper:
                 
                 self.driver.get(self.url)
                 
-                # Debug: Print page title
                 print("\nPage Title:", self.driver.title)
                 
-                # Debug: Print page source length
                 print("\nPage Source Length:", len(self.driver.page_source))
                 
-                # Debug: Print all table elements found
                 print("\nAll tables found on page:")
                 tables = self.driver.find_elements(By.TAG_NAME, "table")
                 print(f"Number of tables found: {len(tables)}")
-                for i, table in enumerate(tables):
-                    print(f"\nTable {i+1}:")
-                    print("Table ID:", table.get_attribute("id"))
-                    print("Table Class:", table.get_attribute("class"))
                 
                 print("\nWaiting for table to load...")
                 wait = WebDriverWait(self.driver, 10)
@@ -71,39 +64,31 @@ class PopulationScraper:
                     EC.presence_of_element_located((By.CLASS_NAME, "datatable"))
                 )
                 
-                # Debug: Print table details
                 print("\nFound target table:")
-                print("Table Class:", table.get_attribute("class"))
                 
                 print("\nExtracting table data...")
-                # Get headers
                 headers = []
                 header_cells = table.find_elements(By.CSS_SELECTOR, "thead th")
                 print(f"\nNumber of header cells found: {len(header_cells)}")
                 for cell in header_cells:
                     header_text = cell.text.strip()
                     headers.append(header_text)
-                    print(f"Header: {header_text}")
                 
-                # Get data rows
                 rows = []
                 data_rows = table.find_elements(By.CSS_SELECTOR, "tbody tr")
                 print(f"\nNumber of data rows found: {len(data_rows)}")
                 
-                for i, row in enumerate(data_rows[:5]):  # Print first 5 rows for debugging
+                for i, row in enumerate(data_rows[:len(data_rows)]):
                     cells = row.find_elements(By.TAG_NAME, "td")
                     if len(cells) >= 10:
                         row_data = [cell.text.strip() for cell in cells]
                         rows.append(row_data)
-                        print(f"\nRow {i+1} data:")
-                        for j, cell_text in enumerate(row_data):
-                            print(f"Column {j+1}: {cell_text}")
                 
                 if not rows:
                     raise ValueError("No data rows found in the table")
                 
                 print("\nCreating DataFrame...")
-                # Create DataFrame
+                
                 df = pd.DataFrame(rows, columns=headers[:len(rows[0]) if rows else 0])
                 
                 print("\nCleaning and processing data...")
@@ -132,7 +117,7 @@ class PopulationScraper:
     
     def _clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """Clean and format the scraped data"""
-        # Rename columns to standard names
+        
         column_mapping = {
             'Country (or\ndependency)': 'Country',
             'Country (or dependency)': 'Country',
@@ -158,20 +143,16 @@ class PopulationScraper:
             'World Share': 'World_Share'
         }
         
-        # Debug: Print original column names
         print("\nOriginal column names:")
         print(df.columns.tolist())
         
-        # Apply column mapping
         for old_name, new_name in column_mapping.items():
             if old_name in df.columns:
                 df = df.rename(columns={old_name: new_name})
         
-        # Debug: Print column names after mapping
         print("\nColumn names after mapping:")
         print(df.columns.tolist())
         
-        # Clean numeric columns
         numeric_columns = ['Population', 'Net_Change', 'Density', 'Land_Area', 
                           'Net_Migration', 'Fertility_Rate', 'Median_Age']
         
@@ -180,14 +161,12 @@ class PopulationScraper:
                 df[col] = df[col].astype(str).str.replace(',', '').str.replace('−', '-')
                 df[col] = pd.to_numeric(df[col], errors='coerce')
         
-        # Clean percentage columns
         percentage_columns = ['Yearly_Change', 'Urban_Population_Percent', 'World_Share']
         for col in percentage_columns:
             if col in df.columns:
                 df[col] = df[col].astype(str).str.replace('%', '').str.replace('−', '-')
                 df[col] = pd.to_numeric(df[col], errors='coerce')
         
-        # Add rank column
         df.insert(0, 'Rank', range(1, len(df) + 1))
         
         return df
@@ -203,11 +182,9 @@ class PopulationScraper:
         if self.data is None:
             self.scrape_data()
         
-        # Debug: Print all column names
         print("\nAvailable columns in DataFrame:")
         print(self.data.columns.tolist())
         
-        # Try both possible column names
         possible_columns = ['Country (or\ndependency)', 'Country (or dependency)', 'Country']
         country_column = None
         
@@ -219,12 +196,10 @@ class PopulationScraper:
         if country_column is None:
             raise ValueError("Could not find country column in the data")
         
-        # Try exact match first
         exact_match = self.data[self.data[country_column].str.lower() == country_name.lower()]
         if not exact_match.empty:
             return exact_match.iloc[0]
-        
-        # Try partial match
+
         partial_match = self.data[self.data[country_column].str.contains(country_name, case=False, na=False)]
         if not partial_match.empty:
             return partial_match.iloc[0]
