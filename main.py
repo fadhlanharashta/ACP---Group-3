@@ -91,28 +91,6 @@ class PopulationExplorerApp:
         
         ttk.Button(top_frame, text="Show Top", command=self.show_top_countries).grid(row=2, column=0, columnspan=2, pady=(5,0), sticky=tk.EW)
         
-        # Advanced search section
-        adv_frame = ttk.LabelFrame(self.control_frame, text="Advanced Search", padding=10)
-        adv_frame.pack(fill=tk.X, pady=5)
-        
-        ttk.Label(adv_frame, text="Metric:").grid(row=0, column=0, sticky=tk.W)
-        self.adv_metric_var = tk.StringVar()
-        self.adv_metric_combo = ttk.Combobox(adv_frame, textvariable=self.adv_metric_var, 
-                                            values=['Population', 'Yearly_Change', 'Density', 'Land_Area', 
-                                                   'Fertility_Rate', 'Median_Age', 'Urban_Population_Percent'])
-        self.adv_metric_combo.grid(row=0, column=1, sticky=tk.EW, padx=5)
-        self.adv_metric_combo.current(0)
-        
-        ttk.Label(adv_frame, text="Min Value:").grid(row=1, column=0, sticky=tk.W)
-        self.min_val_entry = ttk.Entry(adv_frame)
-        self.min_val_entry.grid(row=1, column=1, sticky=tk.EW, padx=5)
-        
-        ttk.Label(adv_frame, text="Max Value:").grid(row=2, column=0, sticky=tk.W)
-        self.max_val_entry = ttk.Entry(adv_frame)
-        self.max_val_entry.grid(row=2, column=1, sticky=tk.EW, padx=5)
-        
-        ttk.Button(adv_frame, text="Search Range", command=self.advanced_search).grid(row=3, column=0, columnspan=2, pady=(5,0), sticky=tk.EW)
-        
         # Export section
         export_frame = ttk.Frame(self.control_frame)
         export_frame.pack(fill=tk.X, pady=(10,0))
@@ -281,53 +259,6 @@ class PopulationExplorerApp:
         # Add visualization button
         ttk.Button(top_window, text="Visualize", 
                   command=lambda: self.visualizer.create_top_countries_chart(top_countries, n, metric)).pack(pady=5)
-    
-    def advanced_search(self):
-        """Search for countries within a specific range"""
-        metric = self.adv_metric_var.get()
-        try:
-            min_val = float(self.min_val_entry.get())
-            max_val = float(self.max_val_entry.get())
-        except ValueError:
-            messagebox.showwarning("Warning", "Please enter valid numbers")
-            return
-        
-        results = self.scraper.get_countries_by_range(metric, min_val, max_val)
-        if results.empty:
-            messagebox.showinfo("Info", "No countries found in this range")
-            return
-        
-        # Display in a new window
-        range_window = tk.Toplevel(self.root)
-        range_window.title(f"Countries with {metric} between {min_val} and {max_val}")
-        range_window.geometry("600x400")
-        
-        # Create treeview
-        tree = ttk.Treeview(range_window, columns=('Rank', 'Country', metric), show='headings')
-        tree.heading('Rank', text='Rank')
-        tree.heading('Country', text='Country')
-        tree.heading(metric, text=metric)
-        
-        # Add data
-        for _, row in results.iterrows():
-            tree.insert('', tk.END, values=(int(row['Rank']), row['Country'], self.format_metric_value(row[metric], metric)))
-        
-        tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # Add to comparison button
-        ttk.Button(range_window, text="Add Selected to Comparison", 
-                  command=lambda: self.add_selected_from_treeview(tree)).pack(pady=5)
-    
-    def add_selected_from_treeview(self, treeview):
-        """Add selected items from treeview to comparison"""
-        selected = treeview.selection()
-        if not selected:
-            messagebox.showwarning("Warning", "Please select countries to add")
-            return
-        
-        for item in selected:
-            country = treeview.item(item)['values'][1]
-            self.add_to_comparison(country)
     
     def visualize_comparison(self):
         """Create visualizations for the comparison list"""

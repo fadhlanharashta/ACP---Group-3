@@ -135,17 +135,26 @@ class PopulationScraper:
         # Rename columns to standard names
         column_mapping = {
             'Country (or\ndependency)': 'Country',
-            'Country (or dependency)': 'Country',  # Fallback for if the br tag is handled differently
+            'Country (or dependency)': 'Country',
             'Population\n(2025)': 'Population',
-            'Population (2025)': 'Population',  # Fallback
+            'Population (2025)': 'Population',
+            'Yearly\nChange': 'Yearly_Change',
             'Yearly Change': 'Yearly_Change',
+            'Net\nChange': 'Net_Change',
             'Net Change': 'Net_Change',
+            'Density\n(P/Km²)': 'Density',
             'Density (P/Km²)': 'Density',
+            'Land Area\n(Km²)': 'Land_Area',
             'Land Area (Km²)': 'Land_Area',
+            'Migrants\n(net)': 'Net_Migration',
             'Migrants (net)': 'Net_Migration',
+            'Fert.\nRate': 'Fertility_Rate',
             'Fert. Rate': 'Fertility_Rate',
+            'Median\nAge': 'Median_Age',
             'Median Age': 'Median_Age',
+            'Urban\nPop %': 'Urban_Population_Percent',
             'Urban Pop %': 'Urban_Population_Percent',
+            'World\nShare': 'World_Share',
             'World Share': 'World_Share'
         }
         
@@ -231,13 +240,3 @@ class PopulationScraper:
             raise ValueError(f"Column '{by}' not found in data")
         
         return self.data.nlargest(n, by)
-    
-    def get_countries_by_range(self, column: str, min_val: float, max_val: float) -> pd.DataFrame:
-        """Get countries within a specified range for a given metric"""
-        if self.data is None:
-            self.scrape_data()
-        
-        if column not in self.data.columns:
-            raise ValueError(f"Column '{column}' not found in data")
-        
-        return self.data[(self.data[column] >= min_val) & (self.data[column] <= max_val)]
