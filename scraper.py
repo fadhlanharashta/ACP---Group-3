@@ -25,9 +25,9 @@ class PopulationScraper:
         chrome_options.add_argument('--disable-dev-shm-usage')
         chrome_options.add_argument('--disable-gpu')
         chrome_options.add_argument('--window-size=1920,1080')
-        chrome_options.add_argument('--disable-software-rasterizer')  # Disable software rasterizer
-        chrome_options.add_argument('--disable-webgl')  # Disable WebGL
-        chrome_options.add_argument('--disable-webgl2')  # Disable WebGL 2.0
+        chrome_options.add_argument('--disable-software-rasterizer')
+        chrome_options.add_argument('--disable-webgl')
+        chrome_options.add_argument('--disable-webgl2')
         
         self.driver = webdriver.Chrome(options=chrome_options)
         
